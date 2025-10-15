@@ -3,9 +3,9 @@ pipeline {
     
     environment {
         PYTHON_VERSION = '3.12'
-        GROQ_API_KEY = credentials('groq-api-key')
-        GOOGLE_API_KEY = credentials('google-api-key')
-        LLM_PROVIDER = 'google'
+        GROQ_API_KEY = "${env.GROQ_API_KEY}"
+        GOOGLE_API_KEY = "${env.GOOGLE_API_KEY}"
+        LLM_PROVIDER = "${env.LLM_PROVIDER}"
         PYTHONPATH = "${WORKSPACE}:${WORKSPACE}/multi_doc_chat"
     }
     
