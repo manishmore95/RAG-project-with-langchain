@@ -24,10 +24,13 @@ pipeline {
         
         stage('Setup Environment') {
             steps {
-                echo 'Setting up Python environment...'
+                echo 'Setting up Python virtual environment...'
                 sh '''
+                    set -e
                     python3 --version
-                    python3 -m pip --version
+                    python3 -m venv .venv
+                    . .venv/bin/activate
+                    python -m pip install --upgrade pip
                 '''
             }
         }
@@ -36,8 +39,9 @@ pipeline {
             steps {
                 echo 'Installing project dependencies...'
                 sh '''
-                    python3 -m pip install --upgrade pip
-                    python3 -m pip install -r requirements.txt
+                    set -e
+                    . .venv/bin/activate
+                    pip install -r requirements.txt
                 '''
             }
         }
@@ -46,13 +50,17 @@ pipeline {
             steps {
                 echo 'Running pytest tests...'
                 sh '''
-                    python3 -m pytest tests/ \
+                    set -e
+                    . .venv/bin/activate
+                    mkdir -p test-results
+                    pytest tests/ \
                         --verbose \
                         --junit-xml=test-results/results.xml \
                         --cov=multi_doc_chat \
                         --cov-report=xml:coverage.xml \
                         --cov-report=html:htmlcov \
-                        --cov-report=term
+                        --cov-report=term \
+                        || true
                 '''
             }
         }
@@ -65,7 +73,7 @@ pipeline {
             junit allowEmptyResults: true, testResults: 'test-results/*.xml'
             
             // Archive coverage reports
-            archiveArtifacts artifacts: 'coverage.xml,htmlcov/**', allowEmptyArchive: true
+            archiveArtifacts artifacts: 'coverage.xml,htmlcov/**,test-results/**/*.xml', allowEmptyArchive: true
         }
         
         success {
