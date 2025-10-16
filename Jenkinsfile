@@ -1,3 +1,23 @@
+/*
+ * LLMOps Azure CI/CD Pipeline
+ * 
+ * IMPORTANT: This pipeline does NOT build Docker images due to ACR Tasks limitations
+ * in free trial/student subscriptions.
+ * 
+ * Workflow:
+ * 1. Build Docker images LOCALLY: ./build-and-push-docker-image.sh
+ * 2. Run this Jenkins pipeline to test and deploy
+ * 
+ * Pipeline stages:
+ * - Checkout code from Git
+ * - Setup Python environment
+ * - Install dependencies
+ * - Run tests with coverage
+ * - Verify Docker image exists in ACR
+ * - Deploy to Azure Container Apps
+ * - Verify deployment health
+ */
+
 pipeline {
     agent any
     
@@ -15,8 +35,6 @@ pipeline {
         APP_ACR_NAME = "llmopsappacr"
         APP_ACR_SERVER = "${APP_ACR_NAME}.azurecr.io"
         IMAGE_NAME = "llmops-app"
-        IMAGE_TAG = "${BUILD_NUMBER}"
-        FULL_IMAGE_NAME = "${APP_ACR_SERVER}/${IMAGE_NAME}:${IMAGE_TAG}"
         
         // Azure Container Apps settings
         APP_RESOURCE_GROUP = "llmops-app-rg"
@@ -102,31 +120,41 @@ pipeline {
             }
         }
         
-        stage('Build Docker Image') {
+        stage('Verify Docker Image Exists') {
             steps {
-                echo '🐳 Building Docker image in Azure Container Registry...'
+                echo '🔍 Verifying Docker image exists in ACR...'
                 sh '''
-                    az acr build \
-                        --registry ${APP_ACR_NAME} \
-                        --image ${IMAGE_NAME}:${IMAGE_TAG} \
-                        --image ${IMAGE_NAME}:latest \
-                        --platform linux/amd64 \
-                        --file Dockerfile \
-                        .
-                '''
-            }
-        }
-        
-        stage('Verify Image in Registry') {
-            steps {
-                echo '✅ Verifying image in Azure Container Registry...'
-                sh '''
-                    echo "Checking image in registry..."
-                    az acr repository show \
-                        --name ${APP_ACR_NAME} \
-                        --image ${IMAGE_NAME}:${IMAGE_TAG}
+                    # Check if image repository exists
+                    if ! az acr repository show --name ${APP_ACR_NAME} --repository ${IMAGE_NAME} &>/dev/null; then
+                        echo "❌ ERROR: Image repository '${IMAGE_NAME}' not found in ACR!"
+                        echo ""
+                        echo "Please build and push the Docker image locally first:"
+                        echo "  chmod +x build-and-push-docker-image.sh"
+                        echo "  ./build-and-push-docker-image.sh"
+                        echo ""
+                        exit 1
+                    fi
                     
-                    echo "Image successfully built and pushed!"
+                    # Check if 'latest' tag exists
+                    if ! az acr repository show-tags \
+                        --name ${APP_ACR_NAME} \
+                        --repository ${IMAGE_NAME} \
+                        --output table | grep -q "latest"; then
+                        echo "❌ ERROR: No 'latest' tag found for image '${IMAGE_NAME}'!"
+                        echo ""
+                        echo "Please build and push the Docker image locally:"
+                        echo "  ./build-and-push-docker-image.sh"
+                        echo ""
+                        exit 1
+                    fi
+                    
+                    echo "✅ Image '${IMAGE_NAME}:latest' found in ACR"
+                    echo ""
+                    echo "Available tags:"
+                    az acr repository show-tags \
+                        --name ${APP_ACR_NAME} \
+                        --repository ${IMAGE_NAME} \
+                        --output table
                 '''
             }
         }
@@ -135,11 +163,11 @@ pipeline {
             steps {
                 echo '🚀 Deploying to Azure Container Apps...'
                 sh '''
-                    # Update container app with new image
+                    # Update container app with latest image
                     az containerapp update \
                         --name ${CONTAINER_APP_NAME} \
                         --resource-group ${APP_RESOURCE_GROUP} \
-                        --image ${FULL_IMAGE_NAME}
+                        --image ${APP_ACR_SERVER}/${IMAGE_NAME}:latest
                     
                     echo "Waiting for deployment to stabilize..."
                     sleep 30

@@ -1,0 +1,25 @@
+#!/bin/bash
+
+APP_ACR_NAME="llmopsappacr"
+IMAGE_NAME="llmops-app"
+BUILD_TAG="${1:-latest}"
+
+echo "🐳 Building Docker image locally..."
+
+# Login to ACR
+az acr login --name $APP_ACR_NAME
+
+# Build image
+docker build \
+    --platform linux/amd64 \
+    -t ${APP_ACR_NAME}.azurecr.io/${IMAGE_NAME}:${BUILD_TAG} \
+    -t ${APP_ACR_NAME}.azurecr.io/${IMAGE_NAME}:latest \
+    -f Dockerfile .
+
+# Push both tags
+echo "📤 Pushing to ACR..."
+docker push ${APP_ACR_NAME}.azurecr.io/${IMAGE_NAME}:${BUILD_TAG}
+docker push ${APP_ACR_NAME}.azurecr.io/${IMAGE_NAME}:latest
+
+echo "✅ Build and push complete!"
+echo "Now run your Jenkins pipeline to deploy."
