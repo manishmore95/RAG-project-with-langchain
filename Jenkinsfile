@@ -129,6 +129,13 @@ pipeline {
             steps {
                 echo '🔍 Verifying Docker image exists in ACR...'
                 sh '''
+                    # Login to Azure
+                    az login --service-principal \
+                        -u ${AZURE_CLIENT_ID} \
+                        -p ${AZURE_CLIENT_SECRET} \
+                        --tenant ${AZURE_TENANT_ID}
+                    az account set --subscription ${AZURE_SUBSCRIPTION_ID}
+                    
                     # Check if image repository exists
                     if ! az acr repository show --name ${APP_ACR_NAME} --repository ${IMAGE_NAME} &>/dev/null; then
                         echo "❌ ERROR: Image repository '${IMAGE_NAME}' not found in ACR!"
@@ -168,6 +175,13 @@ pipeline {
             steps {
                 echo '🚀 Deploying to Azure Container Apps...'
                 sh '''
+                    # Login to Azure
+                    az login --service-principal \
+                        -u ${AZURE_CLIENT_ID} \
+                        -p ${AZURE_CLIENT_SECRET} \
+                        --tenant ${AZURE_TENANT_ID}
+                    az account set --subscription ${AZURE_SUBSCRIPTION_ID}
+                    
                     # Update container app with latest image
                     az containerapp update \
                         --name ${CONTAINER_APP_NAME} \
@@ -184,6 +198,13 @@ pipeline {
             steps {
                 echo '✅ Verifying deployment...'
                 sh '''
+                    # Login to Azure
+                    az login --service-principal \
+                        -u ${AZURE_CLIENT_ID} \
+                        -p ${AZURE_CLIENT_SECRET} \
+                        --tenant ${AZURE_TENANT_ID}
+                    az account set --subscription ${AZURE_SUBSCRIPTION_ID}
+                    
                     # Get app URL
                     APP_URL=$(az containerapp show \
                         --name ${CONTAINER_APP_NAME} \
@@ -225,6 +246,13 @@ pipeline {
         success {
             echo '✅ Pipeline completed successfully! 🎉'
             sh '''
+                # Login to Azure
+                az login --service-principal \
+                    -u ${AZURE_CLIENT_ID} \
+                    -p ${AZURE_CLIENT_SECRET} \
+                    --tenant ${AZURE_TENANT_ID}
+                az account set --subscription ${AZURE_SUBSCRIPTION_ID}
+                
                 APP_URL=$(az containerapp show \
                     --name ${CONTAINER_APP_NAME} \
                     --resource-group ${APP_RESOURCE_GROUP} \
