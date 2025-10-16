@@ -136,6 +136,9 @@ pipeline {
                         --tenant ${AZURE_TENANT_ID}
                     az account set --subscription ${AZURE_SUBSCRIPTION_ID}
                     
+                    # Login to ACR
+                    az acr login --name ${APP_ACR_NAME}
+                    
                     # Check if image repository exists
                     if ! az acr repository show --name ${APP_ACR_NAME} --repository ${IMAGE_NAME} &>/dev/null; then
                         echo "❌ ERROR: Image repository '${IMAGE_NAME}' not found in ACR!"
@@ -181,6 +184,9 @@ pipeline {
                         -p ${AZURE_CLIENT_SECRET} \
                         --tenant ${AZURE_TENANT_ID}
                     az account set --subscription ${AZURE_SUBSCRIPTION_ID}
+                    
+                    # Login to ACR
+                    az acr login --name ${APP_ACR_NAME}
                     
                     # Update container app with latest image
                     az containerapp update \
