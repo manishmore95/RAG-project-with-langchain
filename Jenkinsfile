@@ -50,8 +50,8 @@ pipeline {
                 sh '''
                     set -e
                     python3 --version
-                    python3 -m venv .venv
-                    . .venv/bin/activate
+                    python3 -m venv /tmp/venv-${BUILD_NUMBER}
+                    . /tmp/venv-${BUILD_NUMBER}/bin/activate
                     python -m pip install --upgrade pip
                 '''
             }
@@ -62,7 +62,7 @@ pipeline {
                 echo '📥 Installing project dependencies...'
                 sh '''
                     set -e
-                    . .venv/bin/activate
+                    . /tmp/venv-${BUILD_NUMBER}/bin/activate
                     pip install -r requirements.txt
                 '''
             }
@@ -73,7 +73,7 @@ pipeline {
                 echo '🧪 Running pytest tests...'
                 sh '''
                     set -e
-                    . .venv/bin/activate
+                    . /tmp/venv-${BUILD_NUMBER}/bin/activate
                     mkdir -p test-results
                     pytest tests/ \
                         --verbose \
@@ -209,7 +209,7 @@ pipeline {
         
         cleanup {
             echo '🧹 Cleaning up workspace...'
-            sh 'rm -rf .venv || true'
+            sh 'rm -rf /tmp/venv-${BUILD_NUMBER} || true'
         }
     }
 }
