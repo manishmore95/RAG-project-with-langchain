@@ -50,9 +50,14 @@ pipeline {
     }
     
     triggers {
-        // Trigger on push to main branch
+        // Trigger on push to specific branches
         githubPush()
     }
+    
+    // Note: Branch filtering is done in the pipeline job configuration,
+    // not in the Jenkinsfile trigger. The githubPush() trigger will
+    // receive webhooks for all branches, but Jenkins will only build
+    // branches that match your job's branch specifier.
     
     stages {
         stage('Checkout') {

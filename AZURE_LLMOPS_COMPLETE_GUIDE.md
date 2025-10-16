@@ -153,7 +153,7 @@ chmod +x azure-deploy-jenkins.sh
    az container exec -g llmops-jenkins-rg -n jenkins-llmops \
      --exec-command "cat /var/jenkins_home/secrets/initialAdminPassword"
    ```
-3. Install suggested plugins
+3. Install suggested plugins (including **GitHub Plugin**)
 4. Create admin user
 5. Add these Jenkins credentials:
    - `azure-client-id`: Azure Service Principal App ID
@@ -162,6 +162,44 @@ chmod +x azure-deploy-jenkins.sh
    - `azure-subscription-id`: Azure Subscription ID
    - `acr-username`: From app ACR (created by pipeline)
    - `acr-password`: From app ACR (created by pipeline)
+
+### Configure GitHub Webhook (Required for Auto-Triggering)
+
+To automatically trigger Jenkins builds on git push:
+
+1. **Get your Jenkins URL:**
+   ```bash
+   az container show -g llmops-jenkins-rg -n jenkins-llmops \
+     --query "ipAddress.fqdn" -o tsv
+   ```
+
+2. **In your GitHub repository:**
+   - Go to **Settings** → **Webhooks** → **Add webhook**
+   - **Payload URL:** `http://<jenkins-url>:8080/github-webhook/`
+     - Example: `http://jenkins-llmops-31002.eastus.azurecontainer.io:8080/github-webhook/`
+     - ⚠️ **Important:** Note the trailing `/` after `github-webhook/`
+   - **Content type:** `application/json`
+   - **Events:** Just the push event
+   - **Active:** ✅ Checked
+   - Click **Add webhook**
+
+3. **Verify webhook:**
+   - GitHub will send a test ping
+   - Check for green ✅ checkmark
+   - If red ❌, click webhook to see error details
+
+4. **Test the setup:**
+   ```bash
+   # Make a test commit
+   echo "Test webhook" >> test.txt
+   git add test.txt
+   git commit -m "Test: webhook trigger"
+   git push
+   
+   # Jenkins should automatically start a build!
+   ```
+
+**Troubleshooting:** If webhook doesn't trigger, see `JENKINS_WEBHOOK_TROUBLESHOOTING.md`
 
 ---
 
@@ -679,6 +717,28 @@ az containerapp delete -n llmops-app -g llmops-app-rg --yes
 
 ## Troubleshooting
 
+### GitHub webhook not triggering Jenkins build
+**Most common issue!** See detailed guide: `JENKINS_WEBHOOK_TROUBLESHOOTING.md`
+
+Quick checks:
+```bash
+# 1. Verify Jenkins is accessible
+curl -I http://<jenkins-url>:8080/github-webhook/
+
+# 2. Check webhook in GitHub
+# Go to: Repository → Settings → Webhooks
+# Look for green ✅ (success) or red ❌ (failure)
+
+# 3. Check Jenkins logs
+az container logs -g llmops-jenkins-rg -n jenkins-llmops --tail 100 | grep -i github
+```
+
+**Quick fix:**
+1. Go to your GitHub repo → Settings → Webhooks → Add webhook
+2. URL: `http://<jenkins-url>:8080/github-webhook/` (note trailing `/`)
+3. Content type: `application/json`
+4. Events: Just the push event
+
 ### Jenkins won't start
 ```bash
 # Check logs
@@ -722,6 +782,8 @@ Ensure you have these files in your repository:
 - ✅ `Jenkinsfile` - CI/CD pipeline
 - ✅ `Dockerfile.jenkins` - Jenkins image with Python & Azure CLI
 - ✅ `Dockerfile` - Application image
+- ✅ `JENKINS_WEBHOOK_TROUBLESHOOTING.md` - GitHub webhook troubleshooting guide
+- ✅ `AZURE_LLMOPS_COMPLETE_GUIDE.md` - This complete guide
 
 ---
 
