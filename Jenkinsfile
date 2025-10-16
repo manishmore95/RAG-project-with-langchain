@@ -104,29 +104,29 @@ pipeline {
         
         stage('Build Docker Image') {
             steps {
-                echo '🐳 Building Docker image...'
+                echo '🐳 Building Docker image in Azure Container Registry...'
                 sh '''
-                    docker build \
+                    az acr build \
+                        --registry ${APP_ACR_NAME} \
+                        --image ${IMAGE_NAME}:${IMAGE_TAG} \
+                        --image ${IMAGE_NAME}:latest \
                         --platform linux/amd64 \
-                        -t ${FULL_IMAGE_NAME} \
-                        -t ${APP_ACR_SERVER}/${IMAGE_NAME}:latest \
-                        -f Dockerfile .
+                        --file Dockerfile \
+                        .
                 '''
             }
         }
         
-        stage('Push to Azure Container Registry') {
+        stage('Verify Image in Registry') {
             steps {
-                echo '📤 Pushing image to Azure Container Registry...'
+                echo '✅ Verifying image in Azure Container Registry...'
                 sh '''
-                    # Login to ACR
-                    echo ${ACR_PASSWORD} | docker login ${APP_ACR_SERVER} \
-                        -u ${ACR_USERNAME} \
-                        --password-stdin
+                    echo "Checking image in registry..."
+                    az acr repository show \
+                        --name ${APP_ACR_NAME} \
+                        --image ${IMAGE_NAME}:${IMAGE_TAG}
                     
-                    # Push both tags
-                    docker push ${FULL_IMAGE_NAME}
-                    docker push ${APP_ACR_SERVER}/${IMAGE_NAME}:latest
+                    echo "Image successfully built and pushed!"
                 '''
             }
         }
@@ -187,9 +187,6 @@ pipeline {
             
             // Archive coverage reports
             archiveArtifacts artifacts: 'coverage.xml,htmlcov/**,test-results/**/*.xml', allowEmptyArchive: true
-            
-            // Cleanup
-            sh 'docker image prune -f || true'
         }
         
         success {
