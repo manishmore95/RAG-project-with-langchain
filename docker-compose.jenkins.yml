@@ -5,6 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.jenkins
+      platform: linux/amd64
     container_name: jenkins-local
     privileged: true
     user: root

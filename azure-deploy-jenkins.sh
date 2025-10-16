@@ -60,7 +60,7 @@ ACR_PASSWORD=$(az acr credential show --name $ACR_NAME --query passwords[0].valu
 # Step 7: Build and Push Image
 echo -e "${GREEN}Step 7: Building and Pushing Jenkins Image...${NC}"
 az acr login --name $ACR_NAME
-docker build -f Dockerfile.jenkins -t $ACR_NAME.azurecr.io/jenkins-python:latest .
+docker build --platform linux/amd64 -f Dockerfile.jenkins -t $ACR_NAME.azurecr.io/jenkins-python:latest .
 docker push $ACR_NAME.azurecr.io/jenkins-python:latest
 
 # Step 8: Deploy Container
@@ -69,6 +69,7 @@ az container create \
   --resource-group $RESOURCE_GROUP \
   --name $CONTAINER_NAME \
   --image $ACR_NAME.azurecr.io/jenkins-python:latest \
+  --os-type Linux \
   --registry-login-server $ACR_NAME.azurecr.io \
   --registry-username $ACR_USERNAME \
   --registry-password $ACR_PASSWORD \
