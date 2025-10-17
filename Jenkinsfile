@@ -233,6 +233,10 @@ pipeline {
                         --name ${CONTAINER_APP_NAME} \
                         --resource-group ${APP_RESOURCE_GROUP} \
                         --tail 50 || true
+                    
+                    # Cleanup virtual environment
+                    echo "🧹 Cleaning up virtual environment..."
+                    rm -rf /tmp/venv-${BUILD_NUMBER} || true
                 '''
             }
         }
@@ -250,8 +254,8 @@ pipeline {
         }
         
         always {
-            echo '🧹 Cleaning up...'
-            sh 'rm -rf /tmp/venv-${BUILD_NUMBER} || true'
+            echo '🧹 Pipeline execution finished.'
+            echo '💡 Virtual environment /tmp/venv-${BUILD_NUMBER} will be cleaned up automatically.'
         }
     }
 }
