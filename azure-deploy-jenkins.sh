@@ -42,7 +42,7 @@ az storage share create \
   --account-name $STORAGE_ACCOUNT \
   --account-key $STORAGE_KEY \
   --quota 10
-
+ 
 # Step 5: Create Container Registry
 echo -e "${GREEN}Step 5: Creating Azure Container Registry...${NC}"
 az acr create \
