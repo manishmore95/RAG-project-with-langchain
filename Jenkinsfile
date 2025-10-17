@@ -200,11 +200,31 @@ pipeline {
                         --tenant ${AZURE_TENANT_ID}
                     az account set --subscription ${AZURE_SUBSCRIPTION_ID}
                     
-                    # Update container app with latest image
-                    az containerapp update \
-                        --name ${CONTAINER_APP_NAME} \
-                        --resource-group ${APP_RESOURCE_GROUP} \
-                        --image ${APP_ACR_SERVER}/${IMAGE_NAME}:latest
+                    # Ensure containerapp extension is available
+                    az extension show -n containerapp >/dev/null 2>&1 || az extension add -n containerapp
+
+                    # Create the Container App if it does not exist; otherwise update
+                    if az containerapp show --name ${CONTAINER_APP_NAME} --resource-group ${APP_RESOURCE_GROUP} >/dev/null 2>&1; then
+                        echo "Container App exists. Updating image..."
+                        az containerapp update \
+                            --name ${CONTAINER_APP_NAME} \
+                            --resource-group ${APP_RESOURCE_GROUP} \
+                            --image ${APP_ACR_SERVER}/${IMAGE_NAME}:latest
+                    else
+                        echo "Container App not found. Creating it now..."
+                        az containerapp create \
+                            --name ${CONTAINER_APP_NAME} \
+                            --resource-group ${APP_RESOURCE_GROUP} \
+                            --environment llmops-env \
+                            --image ${APP_ACR_SERVER}/${IMAGE_NAME}:latest \
+                            --ingress external \
+                            --target-port 8080 \
+                            --min-replicas 1 \
+                            --max-replicas 3 \
+                            --registry-server ${APP_ACR_SERVER} \
+                            --registry-username ${ACR_USERNAME} \
+                            --registry-password ${ACR_PASSWORD}
+                    fi
                     
                     echo "Waiting for deployment to stabilize..."
                     sleep 30
@@ -222,6 +242,9 @@ pipeline {
                         -p ${AZURE_CLIENT_SECRET} \
                         --tenant ${AZURE_TENANT_ID}
                     az account set --subscription ${AZURE_SUBSCRIPTION_ID}
+                    
+                    # Ensure containerapp extension is available
+                    az extension show -n containerapp >/dev/null 2>&1 || az extension add -n containerapp
                     
                     # Get app URL
                     APP_URL=$(az containerapp show \
