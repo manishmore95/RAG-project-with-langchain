@@ -76,6 +76,11 @@ pipeline {
                     # Install uv (fast Python package/dependency manager)
                     curl -LsSf https://astral.sh/uv/install.sh | sh
                     UV="$HOME/.local/bin/uv"
+
+                    # Avoid Azure Files limitations by storing uv data outside Jenkins HOME
+                    export UV_PYTHON_INSTALL_DIR=/tmp/uv/python
+                    export XDG_DATA_HOME=/tmp/.local/share
+                    export XDG_CACHE_HOME=/tmp/.cache
                     
                     # Ensure exact Python version matches project (e.g., 3.12)
                     "$UV" python install ${PYTHON_VERSION}
@@ -97,6 +102,10 @@ pipeline {
                     set -e
                     VENV_PY="/tmp/venv-${BUILD_NUMBER}/bin/python"
                     UV="$HOME/.local/bin/uv"
+
+                    # Ensure uv also uses temp storage during dependency resolution
+                    export XDG_DATA_HOME=/tmp/.local/share
+                    export XDG_CACHE_HOME=/tmp/.cache
                     
                     # Create a sanitized requirements file removing local-only and OS-specific deps
                     SAN_REQ=$(mktemp)
