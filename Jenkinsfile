@@ -72,16 +72,20 @@ pipeline {
                 echo '🐍 Setting up Python virtual environment...'
                 sh '''
                     set -e
-                    python3 --version
-                    python3 -m venv /tmp/venv-${BUILD_NUMBER}
-                    . /tmp/venv-${BUILD_NUMBER}/bin/activate
-                    python -m pip install --upgrade pip || true
                     
                     # Install uv (fast Python package/dependency manager)
                     curl -LsSf https://astral.sh/uv/install.sh | sh
+                    UV="$HOME/.local/bin/uv"
                     
-                    # Show uv version for debugging
-                    $HOME/.local/bin/uv --version
+                    # Ensure exact Python version matches project (e.g., 3.12)
+                    "$UV" python install ${PYTHON_VERSION}
+                    
+                    # Create venv with the requested Python version
+                    "$UV" venv --python ${PYTHON_VERSION} /tmp/venv-${BUILD_NUMBER}
+                    
+                    # Show versions for debugging
+                    /tmp/venv-${BUILD_NUMBER}/bin/python --version
+                    "$UV" --version
                 '''
             }
         }
@@ -94,9 +98,12 @@ pipeline {
                     VENV_PY="/tmp/venv-${BUILD_NUMBER}/bin/python"
                     UV="$HOME/.local/bin/uv"
                     
-                    # Create a sanitized requirements file without local-only package 'llmops-series'
+                    # Create a sanitized requirements file removing local-only and OS-specific deps
                     SAN_REQ=$(mktemp)
-                    sed -E '/^[[:space:]]*llmops-series(==.*)?[[:space:]]*$/d' requirements.txt > "$SAN_REQ"
+                    cat requirements.txt \
+                      | sed -E '/^[[:space:]]*llmops-series(==.*)?[[:space:]]*$/d' \
+                      | sed -E '/^[[:space:]]*pywin32(==.*)?[[:space:]]*$/d' \
+                      > "$SAN_REQ"
                     
                     # Install third-party dependencies with uv into the venv interpreter
                     "$UV" pip install --python "$VENV_PY" -r "$SAN_REQ"
