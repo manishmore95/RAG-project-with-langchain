@@ -123,15 +123,19 @@ async def upload(files: List[UploadFile] = File(...)) -> UploadResponse:
 async def chat(req: ChatRequest) -> ChatResponse:
     session_id = req.session_id
     message = req.message.strip()
-    if not session_id or session_id not in SESSIONS:
+    if not session_id:
         raise HTTPException(status_code=400, detail="Invalid or expired session_id. Re-upload documents.")
     if not message:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
     try:
+        # Validate session by checking persisted FAISS index (survives restarts)
+        index_path = f"faiss_index/{session_id}"
+        if not os.path.isdir(index_path):
+            raise HTTPException(status_code=400, detail="Invalid or expired session_id. Re-upload documents.")
+
         # Build RAG and load retriever from persisted FAISS with MMR
         rag = ConversationalRAG(session_id=session_id)
-        index_path = f"faiss_index/{session_id}"
         rag.load_retriever_from_faiss(
             index_path=index_path,
             search_type="mmr",
@@ -155,6 +159,7 @@ async def chat(req: ChatRequest) -> ChatResponse:
         # Update history
         simple.append({"role": "user", "content": message})
         simple.append({"role": "assistant", "content": answer})
+        # Ensure session history is initialized even after restarts
         SESSIONS[session_id] = simple
 
         return ChatResponse(answer=answer)
