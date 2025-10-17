@@ -235,30 +235,36 @@ pipeline {
     
     post {
         always {
-            echo '📊 Archiving test results...'
-            // Publish test results
-            junit allowEmptyResults: true, testResults: 'test-results/*.xml'
-            
-            // Archive coverage reports
-            archiveArtifacts artifacts: 'coverage.xml,htmlcov/**,test-results/**/*.xml', allowEmptyArchive: true
+            script {
+                echo '📊 Archiving test results...'
+                // Publish test results and archive artifacts within a node context
+                try {
+                    junit allowEmptyResults: true, testResults: 'test-results/*.xml'
+                    archiveArtifacts artifacts: 'coverage.xml,htmlcov/**,test-results/**/*.xml', allowEmptyArchive: true
+                } catch (Exception e) {
+                    echo "⚠️  Warning: Could not archive test results: ${e.message}"
+                }
+            }
         }
         
         success {
-            echo '✅ Pipeline completed successfully! 🎉'
-            sh '''
-                # Login to Azure
-                az login --service-principal \
-                    -u ${AZURE_CLIENT_ID} \
-                    -p ${AZURE_CLIENT_SECRET} \
-                    --tenant ${AZURE_TENANT_ID}
-                az account set --subscription ${AZURE_SUBSCRIPTION_ID}
-                
-                APP_URL=$(az containerapp show \
-                    --name ${CONTAINER_APP_NAME} \
-                    --resource-group ${APP_RESOURCE_GROUP} \
-                    --query properties.configuration.ingress.fqdn -o tsv)
-                echo "🌐 Application is live at: https://${APP_URL}"
-            '''
+            script {
+                echo '✅ Pipeline completed successfully! 🎉'
+                sh '''
+                    # Login to Azure
+                    az login --service-principal \
+                        -u ${AZURE_CLIENT_ID} \
+                        -p ${AZURE_CLIENT_SECRET} \
+                        --tenant ${AZURE_TENANT_ID}
+                    az account set --subscription ${AZURE_SUBSCRIPTION_ID}
+                    
+                    APP_URL=$(az containerapp show \
+                        --name ${CONTAINER_APP_NAME} \
+                        --resource-group ${APP_RESOURCE_GROUP} \
+                        --query properties.configuration.ingress.fqdn -o tsv)
+                    echo "🌐 Application is live at: https://${APP_URL}"
+                '''
+            }
         }
         
         failure {
@@ -266,8 +272,10 @@ pipeline {
         }
         
         cleanup {
-            echo '🧹 Cleaning up workspace...'
-            sh 'rm -rf /tmp/venv-${BUILD_NUMBER} || true'
+            script {
+                echo '🧹 Cleaning up workspace...'
+                sh 'rm -rf /tmp/venv-${BUILD_NUMBER} || true'
+            }
         }
     }
 }
