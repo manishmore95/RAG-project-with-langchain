@@ -141,30 +141,43 @@ pipeline {
                         --tenant ${AZURE_TENANT_ID}
                     az account set --subscription ${AZURE_SUBSCRIPTION_ID}
                     
-                    # Check if image repository exists
-                    if ! az acr repository show --name ${APP_ACR_NAME} --repository ${IMAGE_NAME} &>/dev/null; then
-                        echo "❌ ERROR: Image repository '${IMAGE_NAME}' not found in ACR!"
-                        echo ""
-                        echo "Please build and push the Docker image locally first:"
-                        echo "  chmod +x build-and-push-docker-image.sh"
-                        echo "  ./build-and-push-docker-image.sh"
-                        echo ""
-                        exit 1
-                    fi
-                    
-                    # Check if 'latest' tag exists
-                    if ! az acr repository show-tags \
-                        --name ${APP_ACR_NAME} \
-                        --repository ${IMAGE_NAME} \
-                        --output table | grep -q "latest"; then
-                        echo "❌ ERROR: No 'latest' tag found for image '${IMAGE_NAME}'!"
-                        echo ""
-                        echo "Please build and push the Docker image locally:"
-                        echo "  ./build-and-push-docker-image.sh"
-                        echo ""
-                        exit 1
-                    fi
-                    
+                    # Retry parameters for eventual consistency on ACR/role assignments
+                    MAX_RETRIES=6
+                    SLEEP_SECS=10
+                    ATTEMPT=1
+
+                    echo "Checking for repository '${IMAGE_NAME}' in ACR '${APP_ACR_NAME}' with up to ${MAX_RETRIES} retries..."
+                    until az acr repository show --name ${APP_ACR_NAME} --repository ${IMAGE_NAME} &>/dev/null; do
+                        if [ $ATTEMPT -ge $MAX_RETRIES ]; then
+                            echo "❌ ERROR: Image repository '${IMAGE_NAME}' not found in ACR after ${MAX_RETRIES} attempts."
+                            echo ""
+                            echo "Please build and push the Docker image locally first:"
+                            echo "  chmod +x build-and-push-docker-image.sh"
+                            echo "  ./build-and-push-docker-image.sh"
+                            echo ""
+                            exit 1
+                        fi
+                        echo "Attempt ${ATTEMPT}/${MAX_RETRIES}: repository not found. Waiting ${SLEEP_SECS}s and retrying..."
+                        sleep ${SLEEP_SECS}
+                        ATTEMPT=$((ATTEMPT+1))
+                    done
+
+                    echo "Repository found. Checking for 'latest' tag with retries..."
+                    ATTEMPT=1
+                    until az acr repository show-tags --name ${APP_ACR_NAME} --repository ${IMAGE_NAME} --output tsv | grep -q "^latest$"; do
+                        if [ $ATTEMPT -ge $MAX_RETRIES ]; then
+                            echo "❌ ERROR: No 'latest' tag found for image '${IMAGE_NAME}' after ${MAX_RETRIES} attempts."
+                            echo ""
+                            echo "Please build and push the Docker image locally:"
+                            echo "  ./build-and-push-docker-image.sh"
+                            echo ""
+                            exit 1
+                        fi
+                        echo "Attempt ${ATTEMPT}/${MAX_RETRIES}: 'latest' tag not found. Waiting ${SLEEP_SECS}s and retrying..."
+                        sleep ${SLEEP_SECS}
+                        ATTEMPT=$((ATTEMPT+1))
+                    done
+
                     echo "✅ Image '${IMAGE_NAME}:latest' found in ACR"
                     echo ""
                     echo "Available tags:"
