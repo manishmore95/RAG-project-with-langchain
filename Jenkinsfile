@@ -107,6 +107,11 @@ pipeline {
                         --cov-report=term \
                         || true
                 '''
+                
+                // Archive test results and coverage reports immediately
+                echo '📊 Archiving test results...'
+                junit allowEmptyResults: true, testResults: 'test-results/*.xml'
+                archiveArtifacts artifacts: 'coverage.xml,htmlcov/**,test-results/**/*.xml', allowEmptyArchive: true
             }
         }
         
@@ -234,48 +239,19 @@ pipeline {
     }
     
     post {
-        always {
-            script {
-                echo '📊 Archiving test results...'
-                // Publish test results and archive artifacts within a node context
-                try {
-                    junit allowEmptyResults: true, testResults: 'test-results/*.xml'
-                    archiveArtifacts artifacts: 'coverage.xml,htmlcov/**,test-results/**/*.xml', allowEmptyArchive: true
-                } catch (Exception e) {
-                    echo "⚠️  Warning: Could not archive test results: ${e.message}"
-                }
-            }
-        }
-        
         success {
-            script {
-                echo '✅ Pipeline completed successfully! 🎉'
-                sh '''
-                    # Login to Azure
-                    az login --service-principal \
-                        -u ${AZURE_CLIENT_ID} \
-                        -p ${AZURE_CLIENT_SECRET} \
-                        --tenant ${AZURE_TENANT_ID}
-                    az account set --subscription ${AZURE_SUBSCRIPTION_ID}
-                    
-                    APP_URL=$(az containerapp show \
-                        --name ${CONTAINER_APP_NAME} \
-                        --resource-group ${APP_RESOURCE_GROUP} \
-                        --query properties.configuration.ingress.fqdn -o tsv)
-                    echo "🌐 Application is live at: https://${APP_URL}"
-                '''
-            }
+            echo '✅ Pipeline completed successfully! 🎉'
+            echo '📊 Test results and coverage reports have been archived.'
         }
         
         failure {
             echo '❌ Pipeline failed!'
+            echo 'Check the console output above for error details.'
         }
         
-        cleanup {
-            script {
-                echo '🧹 Cleaning up workspace...'
-                sh 'rm -rf /tmp/venv-${BUILD_NUMBER} || true'
-            }
+        always {
+            echo '🧹 Cleaning up...'
+            sh 'rm -rf /tmp/venv-${BUILD_NUMBER} || true'
         }
     }
 }
