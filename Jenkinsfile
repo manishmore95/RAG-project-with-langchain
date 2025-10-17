@@ -223,7 +223,11 @@ pipeline {
                             --max-replicas 3 \
                             --registry-server ${APP_ACR_SERVER} \
                             --registry-username ${ACR_USERNAME} \
-                            --registry-password ${ACR_PASSWORD}
+                            --registry-password ${ACR_PASSWORD} \
+                            --env-vars \
+                                GROQ_API_KEY="${GROQ_API_KEY}" \
+                                GOOGLE_API_KEY="${GOOGLE_API_KEY}" \
+                                LLM_PROVIDER="${LLM_PROVIDER}"
                     fi
                     
                     echo "Waiting for deployment to stabilize..."
