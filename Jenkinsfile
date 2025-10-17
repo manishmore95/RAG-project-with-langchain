@@ -243,31 +243,73 @@ pipeline {
                         az group create --name ${APP_RESOURCE_GROUP} --location ${APP_LOCATION} >/dev/null
                     fi
 
-                    # Ensure Container Apps environment exists
-                    if ! az containerapp env show --name ${CONTAINER_APP_ENV} --resource-group ${APP_RESOURCE_GROUP} >/dev/null 2>&1; then
+                    # Ensure Container Apps environment exists and is healthy
+                    get_env_state() {
+                        az containerapp env show \
+                            --name ${CONTAINER_APP_ENV} \
+                            --resource-group ${APP_RESOURCE_GROUP} \
+                            --query properties.provisioningState -o tsv 2>/dev/null || echo "NotFound"
+                    }
+
+                    recreate_env() {
+                        echo "Recreating Container Apps environment ${CONTAINER_APP_ENV}..."
+                        az containerapp env delete \
+                            --name ${CONTAINER_APP_ENV} \
+                            --resource-group ${APP_RESOURCE_GROUP} \
+                            --yes --no-wait || true
+                        # Wait until it's fully deleted
+                        MAX_DELETE_RETRIES=60
+                        ATT=1
+                        until [ "$(get_env_state)" = "NotFound" ]; do
+                            if [ $ATT -ge $MAX_DELETE_RETRIES ]; then
+                                echo "❌ ERROR: Environment ${CONTAINER_APP_ENV} did not delete in time."
+                                exit 1
+                            fi
+                            echo "Waiting for ${CONTAINER_APP_ENV} deletion... (${ATT}/${MAX_DELETE_RETRIES})"
+                            sleep 10
+                            ATT=$((ATT+1))
+                        done
+                        # Create fresh env
+                        az containerapp env create \
+                            --name ${CONTAINER_APP_ENV} \
+                            --resource-group ${APP_RESOURCE_GROUP} \
+                            --location ${APP_LOCATION}
+                    }
+
+                    STATE=$(get_env_state)
+                    if [ "$STATE" = "NotFound" ]; then
                         echo "Container Apps environment ${CONTAINER_APP_ENV} not found. Creating..."
                         az containerapp env create \
                             --name ${CONTAINER_APP_ENV} \
                             --resource-group ${APP_RESOURCE_GROUP} \
                             --location ${APP_LOCATION}
-                    else
-                        echo "Container Apps environment ${CONTAINER_APP_ENV} exists."
+                        STATE="$(get_env_state)"
                     fi
 
-                    # Wait for environment to be provisioned (ManagedEnvironmentNotProvisioned guard)
-                    echo "Waiting for environment ${CONTAINER_APP_ENV} to be 'Succeeded'..."
-                    MAX_RETRIES=30
+                    if [ "$STATE" = "ScheduledForDelete" ] || [ "$STATE" = "Failed" ]; then
+                        echo "Environment state is '$STATE'. Will recreate."
+                        recreate_env
+                        STATE="$(get_env_state)"
+                    fi
+
+                    echo "Waiting for environment ${CONTAINER_APP_ENV} to be 'Succeeded'... (current: $STATE)"
+                    MAX_RETRIES=60
                     SLEEP_SECS=10
                     ATTEMPT=1
-                    until [ "$(az containerapp env show --name ${CONTAINER_APP_ENV} --resource-group ${APP_RESOURCE_GROUP} --query properties.provisioningState -o tsv)" = "Succeeded" ]; do
+                    while [ "$(get_env_state)" != "Succeeded" ]; do
                         if [ $ATTEMPT -ge $MAX_RETRIES ]; then
                             echo "❌ ERROR: Environment ${CONTAINER_APP_ENV} is not ready after $((MAX_RETRIES*SLEEP_SECS))s."
                             az containerapp env show --name ${CONTAINER_APP_ENV} --resource-group ${APP_RESOURCE_GROUP} -o yaml || true
                             exit 1
                         fi
-                        echo "Attempt ${ATTEMPT}/${MAX_RETRIES}: provisioningState=$(az containerapp env show --name ${CONTAINER_APP_ENV} --resource-group ${APP_RESOURCE_GROUP} --query properties.provisioningState -o tsv). Waiting ${SLEEP_SECS}s..."
+                        CURR=$(get_env_state)
+                        echo "Attempt ${ATTEMPT}/${MAX_RETRIES}: provisioningState=${CURR}. Waiting ${SLEEP_SECS}s..."
                         sleep ${SLEEP_SECS}
                         ATTEMPT=$((ATTEMPT+1))
+                        # If it flips to ScheduledForDelete or Failed mid-wait, recreate
+                        if [ "$CURR" = "ScheduledForDelete" ] || [ "$CURR" = "Failed" ]; then
+                            recreate_env
+                        fi
                     done
 
                     # Create the Container App if it does not exist; otherwise update
