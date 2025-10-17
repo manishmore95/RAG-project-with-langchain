@@ -39,6 +39,8 @@ pipeline {
         // Azure Container Apps settings
         APP_RESOURCE_GROUP = "llmops-app-rg"
         CONTAINER_APP_NAME = "llmops-app"
+        CONTAINER_APP_ENV = "llmops-env"
+        APP_LOCATION = "eastus"
         
         // Azure credentials (from Jenkins credentials store)
         AZURE_CLIENT_ID = credentials('azure-client-id')
@@ -235,6 +237,39 @@ pipeline {
                     # Ensure containerapp extension is available
                     az extension show -n containerapp >/dev/null 2>&1 || az extension add -n containerapp
 
+                    # Ensure resource group exists
+                    if [ "$(az group exists --name ${APP_RESOURCE_GROUP})" != "true" ]; then
+                        echo "Resource group ${APP_RESOURCE_GROUP} not found. Creating..."
+                        az group create --name ${APP_RESOURCE_GROUP} --location ${APP_LOCATION} >/dev/null
+                    fi
+
+                    # Ensure Container Apps environment exists
+                    if ! az containerapp env show --name ${CONTAINER_APP_ENV} --resource-group ${APP_RESOURCE_GROUP} >/dev/null 2>&1; then
+                        echo "Container Apps environment ${CONTAINER_APP_ENV} not found. Creating..."
+                        az containerapp env create \
+                            --name ${CONTAINER_APP_ENV} \
+                            --resource-group ${APP_RESOURCE_GROUP} \
+                            --location ${APP_LOCATION}
+                    else
+                        echo "Container Apps environment ${CONTAINER_APP_ENV} exists."
+                    fi
+
+                    # Wait for environment to be provisioned (ManagedEnvironmentNotProvisioned guard)
+                    echo "Waiting for environment ${CONTAINER_APP_ENV} to be 'Succeeded'..."
+                    MAX_RETRIES=30
+                    SLEEP_SECS=10
+                    ATTEMPT=1
+                    until [ "$(az containerapp env show --name ${CONTAINER_APP_ENV} --resource-group ${APP_RESOURCE_GROUP} --query properties.provisioningState -o tsv)" = "Succeeded" ]; do
+                        if [ $ATTEMPT -ge $MAX_RETRIES ]; then
+                            echo "❌ ERROR: Environment ${CONTAINER_APP_ENV} is not ready after $((MAX_RETRIES*SLEEP_SECS))s."
+                            az containerapp env show --name ${CONTAINER_APP_ENV} --resource-group ${APP_RESOURCE_GROUP} -o yaml || true
+                            exit 1
+                        fi
+                        echo "Attempt ${ATTEMPT}/${MAX_RETRIES}: provisioningState=$(az containerapp env show --name ${CONTAINER_APP_ENV} --resource-group ${APP_RESOURCE_GROUP} --query properties.provisioningState -o tsv). Waiting ${SLEEP_SECS}s..."
+                        sleep ${SLEEP_SECS}
+                        ATTEMPT=$((ATTEMPT+1))
+                    done
+
                     # Create the Container App if it does not exist; otherwise update
                     if az containerapp show --name ${CONTAINER_APP_NAME} --resource-group ${APP_RESOURCE_GROUP} >/dev/null 2>&1; then
                         echo "Container App exists. Updating image..."
@@ -247,7 +282,7 @@ pipeline {
                         az containerapp create \
                             --name ${CONTAINER_APP_NAME} \
                             --resource-group ${APP_RESOURCE_GROUP} \
-                            --environment llmops-env \
+                            --environment ${CONTAINER_APP_ENV} \
                             --image ${APP_ACR_SERVER}/${IMAGE_NAME}:latest \
                             --ingress external \
                             --target-port 8080 \
