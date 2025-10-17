@@ -75,7 +75,13 @@ pipeline {
                     python3 --version
                     python3 -m venv /tmp/venv-${BUILD_NUMBER}
                     . /tmp/venv-${BUILD_NUMBER}/bin/activate
-                    python -m pip install --upgrade pip
+                    python -m pip install --upgrade pip || true
+                    
+                    # Install uv (fast Python package/dependency manager)
+                    curl -LsSf https://astral.sh/uv/install.sh | sh
+                    
+                    # Show uv version for debugging
+                    $HOME/.local/bin/uv --version
                 '''
             }
         }
@@ -85,8 +91,11 @@ pipeline {
                 echo '📥 Installing project dependencies...'
                 sh '''
                     set -e
-                    . /tmp/venv-${BUILD_NUMBER}/bin/activate
-                    pip install -r requirements.txt
+                    # Use uv to install dependencies into the job's virtualenv
+                    # This installs into the specified Python interpreter without needing to activate
+                    $HOME/.local/bin/uv pip install \
+                        --python /tmp/venv-${BUILD_NUMBER}/bin/python \
+                        -r requirements.txt
                 '''
             }
         }
