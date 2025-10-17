@@ -91,11 +91,18 @@ pipeline {
                 echo '📥 Installing project dependencies...'
                 sh '''
                     set -e
-                    # Use uv to install dependencies into the job's virtualenv
-                    # This installs into the specified Python interpreter without needing to activate
-                    $HOME/.local/bin/uv pip install \
-                        --python /tmp/venv-${BUILD_NUMBER}/bin/python \
-                        -r requirements.txt
+                    VENV_PY="/tmp/venv-${BUILD_NUMBER}/bin/python"
+                    UV="$HOME/.local/bin/uv"
+                    
+                    # Create a sanitized requirements file without local-only package 'llmops-series'
+                    SAN_REQ=$(mktemp)
+                    sed -E '/^[[:space:]]*llmops-series(==.*)?[[:space:]]*$/d' requirements.txt > "$SAN_REQ"
+                    
+                    # Install third-party dependencies with uv into the venv interpreter
+                    "$UV" pip install --python "$VENV_PY" -r "$SAN_REQ"
+                    
+                    # Install the current repository as an editable package (replaces llmops-series)
+                    "$UV" pip install --python "$VENV_PY" -e .
                 '''
             }
         }
