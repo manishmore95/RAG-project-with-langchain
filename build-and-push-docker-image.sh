@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 APP_ACR_NAME="llmopsappacr"
 IMAGE_NAME="llmops-app"
