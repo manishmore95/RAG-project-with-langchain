@@ -51,15 +51,17 @@ pipeline {
         ACR_PASSWORD = credentials('acr-password')
     }
     
-    triggers {
-        // Trigger on push to specific branches
-        githubPush()
+    parameters {
+        booleanParam(name: 'RUN_DEPLOY', defaultValue: false, description: 'Run Azure deploy stages')
     }
     
-    // Note: Branch filtering is done in the pipeline job configuration,
-    // not in the Jenkinsfile trigger. The githubPush() trigger will
-    // receive webhooks for all branches, but Jenkins will only build
-    // branches that match your job's branch specifier.
+    triggers {
+        // Poll SCM approximately every 2 minutes (no GitHub webhook/tunnel needed)
+        pollSCM('H/2 * * * *')
+    }
+    
+    // Note: Using SCM polling instead of GitHub webhooks. Branch filtering
+    // is done in the pipeline job configuration (e.g., */main).
     
     stages {
         stage('Checkout') {
@@ -150,6 +152,9 @@ pipeline {
         }
         
         stage('Login to Azure') {
+            when {
+                expression { params.RUN_DEPLOY }
+            }
             steps {
                 echo '🔐 Logging into Azure...'
                 sh '''
@@ -165,6 +170,9 @@ pipeline {
         }
         
         stage('Verify Docker Image Exists') {
+            when {
+                expression { params.RUN_DEPLOY }
+            }
             steps {
                 echo '🔍 Verifying Docker image exists in ACR...'
                 sh '''
@@ -224,6 +232,9 @@ pipeline {
         }
         
         stage('Deploy to Azure Container Apps') {
+            when {
+                expression { params.RUN_DEPLOY }
+            }
             steps {
                 echo '🚀 Deploying to Azure Container Apps...'
                 sh '''
@@ -346,6 +357,9 @@ pipeline {
         }
         
         stage('Verify Deployment') {
+            when {
+                expression { params.RUN_DEPLOY }
+            }
             steps {
                 echo '✅ Verifying deployment...'
                 sh '''

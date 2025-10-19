@@ -5,12 +5,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.jenkins
-      platform: linux/amd64
+    platform: linux/amd64
     container_name: jenkins-local
     privileged: true
     user: root
     ports:
-      - "8081:8080"
+      - "8083:8080"
       - "50000:50000"
     volumes:
       - jenkins_home:/var/jenkins_home

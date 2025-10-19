@@ -26,6 +26,9 @@ RUN apt-get update && \
 # Create symbolic link for python command
 RUN ln -s /usr/bin/python3 /usr/bin/python
 
+# Pre-install essential Jenkins plugins for this pipeline
+RUN jenkins-plugin-cli --plugins "git workflow-aggregator junit github-branch-source"
+
 # Configure git to allow all directories (fixes dubious ownership errors in Jenkins)
 RUN git config --system --add safe.directory '*'
 
