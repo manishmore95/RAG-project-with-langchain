@@ -116,6 +116,9 @@ pipeline {
                     # Install third-party dependencies with uv into the venv interpreter
                     "$UV" pip install --python "$VENV_PY" -r "$SAN_REQ"
                     
+                    # Ensure test tooling is available
+                    "$UV" pip install --python "$VENV_PY" pytest pytest-cov
+                    
                     # Skip editable install; rely on PYTHONPATH set at pipeline level
                     echo "Using PYTHONPATH=${PYTHONPATH} for local package imports"
                 '''
