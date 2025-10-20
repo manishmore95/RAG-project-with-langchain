@@ -26,10 +26,10 @@ pipeline {
         PYTHON_VERSION = '3.12'
         PYTHONPATH = "${WORKSPACE}:${WORKSPACE}/multi_doc_chat"
         
-        // API Keys for testing
-        GROQ_API_KEY = "${env.GROQ_API_KEY}"
-        GOOGLE_API_KEY = "${env.GOOGLE_API_KEY}"
-        LLM_PROVIDER = "${env.LLM_PROVIDER}"
+        // API Keys for testing (optional - set in Jenkins if needed)
+        GROQ_API_KEY = "${env.GROQ_API_KEY ?: ''}"
+        GOOGLE_API_KEY = "${env.GOOGLE_API_KEY ?: ''}"
+        LLM_PROVIDER = "${env.LLM_PROVIDER ?: 'groq'}"
         
         // Azure Container Registry settings
         APP_ACR_NAME = "llmopsappacr"
@@ -42,13 +42,8 @@ pipeline {
         CONTAINER_APP_ENV = "llmops-env"
         APP_LOCATION = "eastus"
         
-        // Azure credentials (from Jenkins credentials store)
-        AZURE_CLIENT_ID = credentials('azure-client-id')
-        AZURE_CLIENT_SECRET = credentials('azure-client-secret')
-        AZURE_TENANT_ID = credentials('azure-tenant-id')
-        AZURE_SUBSCRIPTION_ID = credentials('azure-subscription-id')
-        ACR_USERNAME = credentials('acr-username')
-        ACR_PASSWORD = credentials('acr-password')
+        // NOTE: Azure credentials are loaded dynamically in deploy stages
+        // to allow test-only runs without requiring credentials
     }
     
     parameters {
@@ -157,15 +152,22 @@ pipeline {
             }
             steps {
                 echo '🔐 Logging into Azure...'
-                sh '''
-                    az login --service-principal \
-                        -u ${AZURE_CLIENT_ID} \
-                        -p ${AZURE_CLIENT_SECRET} \
-                        --tenant ${AZURE_TENANT_ID}
-                    
-                    az account set --subscription ${AZURE_SUBSCRIPTION_ID}
-                    az account show
-                '''
+                withCredentials([
+                    string(credentialsId: 'azure-client-id', variable: 'AZURE_CLIENT_ID'),
+                    string(credentialsId: 'azure-client-secret', variable: 'AZURE_CLIENT_SECRET'),
+                    string(credentialsId: 'azure-tenant-id', variable: 'AZURE_TENANT_ID'),
+                    string(credentialsId: 'azure-subscription-id', variable: 'AZURE_SUBSCRIPTION_ID')
+                ]) {
+                    sh '''
+                        az login --service-principal \
+                            -u ${AZURE_CLIENT_ID} \
+                            -p ${AZURE_CLIENT_SECRET} \
+                            --tenant ${AZURE_TENANT_ID}
+                        
+                        az account set --subscription ${AZURE_SUBSCRIPTION_ID}
+                        az account show
+                    '''
+                }
             }
         }
         
@@ -175,13 +177,19 @@ pipeline {
             }
             steps {
                 echo '🔍 Verifying Docker image exists in ACR...'
-                sh '''
-                    # Login to Azure
-                    az login --service-principal \
-                        -u ${AZURE_CLIENT_ID} \
-                        -p ${AZURE_CLIENT_SECRET} \
-                        --tenant ${AZURE_TENANT_ID}
-                    az account set --subscription ${AZURE_SUBSCRIPTION_ID}
+                withCredentials([
+                    string(credentialsId: 'azure-client-id', variable: 'AZURE_CLIENT_ID'),
+                    string(credentialsId: 'azure-client-secret', variable: 'AZURE_CLIENT_SECRET'),
+                    string(credentialsId: 'azure-tenant-id', variable: 'AZURE_TENANT_ID'),
+                    string(credentialsId: 'azure-subscription-id', variable: 'AZURE_SUBSCRIPTION_ID')
+                ]) {
+                    sh '''
+                        # Login to Azure
+                        az login --service-principal \
+                            -u ${AZURE_CLIENT_ID} \
+                            -p ${AZURE_CLIENT_SECRET} \
+                            --tenant ${AZURE_TENANT_ID}
+                        az account set --subscription ${AZURE_SUBSCRIPTION_ID}
                     
                     # Retry parameters for eventual consistency on ACR/role assignments
                     MAX_RETRIES=6
@@ -227,7 +235,8 @@ pipeline {
                         --name ${APP_ACR_NAME} \
                         --repository ${IMAGE_NAME} \
                         --output table
-                '''
+                    '''
+                }
             }
         }
         
@@ -237,13 +246,21 @@ pipeline {
             }
             steps {
                 echo '🚀 Deploying to Azure Container Apps...'
-                sh '''
-                    # Login to Azure
-                    az login --service-principal \
-                        -u ${AZURE_CLIENT_ID} \
-                        -p ${AZURE_CLIENT_SECRET} \
-                        --tenant ${AZURE_TENANT_ID}
-                    az account set --subscription ${AZURE_SUBSCRIPTION_ID}
+                withCredentials([
+                    string(credentialsId: 'azure-client-id', variable: 'AZURE_CLIENT_ID'),
+                    string(credentialsId: 'azure-client-secret', variable: 'AZURE_CLIENT_SECRET'),
+                    string(credentialsId: 'azure-tenant-id', variable: 'AZURE_TENANT_ID'),
+                    string(credentialsId: 'azure-subscription-id', variable: 'AZURE_SUBSCRIPTION_ID'),
+                    string(credentialsId: 'acr-username', variable: 'ACR_USERNAME'),
+                    string(credentialsId: 'acr-password', variable: 'ACR_PASSWORD')
+                ]) {
+                    sh '''
+                        # Login to Azure
+                        az login --service-principal \
+                            -u ${AZURE_CLIENT_ID} \
+                            -p ${AZURE_CLIENT_SECRET} \
+                            --tenant ${AZURE_TENANT_ID}
+                        az account set --subscription ${AZURE_SUBSCRIPTION_ID}
                     
                     # Ensure containerapp extension is available
                     az extension show -n containerapp >/dev/null 2>&1 || az extension add -n containerapp
@@ -352,7 +369,8 @@ pipeline {
                     
                     echo "Waiting for deployment to stabilize..."
                     sleep 30
-                '''
+                    '''
+                }
             }
         }
         
@@ -362,13 +380,19 @@ pipeline {
             }
             steps {
                 echo '✅ Verifying deployment...'
-                sh '''
-                    # Login to Azure
-                    az login --service-principal \
-                        -u ${AZURE_CLIENT_ID} \
-                        -p ${AZURE_CLIENT_SECRET} \
-                        --tenant ${AZURE_TENANT_ID}
-                    az account set --subscription ${AZURE_SUBSCRIPTION_ID}
+                withCredentials([
+                    string(credentialsId: 'azure-client-id', variable: 'AZURE_CLIENT_ID'),
+                    string(credentialsId: 'azure-client-secret', variable: 'AZURE_CLIENT_SECRET'),
+                    string(credentialsId: 'azure-tenant-id', variable: 'AZURE_TENANT_ID'),
+                    string(credentialsId: 'azure-subscription-id', variable: 'AZURE_SUBSCRIPTION_ID')
+                ]) {
+                    sh '''
+                        # Login to Azure
+                        az login --service-principal \
+                            -u ${AZURE_CLIENT_ID} \
+                            -p ${AZURE_CLIENT_SECRET} \
+                            --tenant ${AZURE_TENANT_ID}
+                        az account set --subscription ${AZURE_SUBSCRIPTION_ID}
                     
                     # Ensure containerapp extension is available
                     az extension show -n containerapp >/dev/null 2>&1 || az extension add -n containerapp
@@ -400,7 +424,8 @@ pipeline {
                     # Cleanup virtual environment
                     echo "🧹 Cleaning up virtual environment..."
                     rm -rf /tmp/venv-${BUILD_NUMBER} || true
-                '''
+                    '''
+                }
             }
         }
     }
