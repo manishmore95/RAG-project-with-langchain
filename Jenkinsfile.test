@@ -26,7 +26,7 @@ pipeline {
     
     triggers {
         // Poll SCM approximately every 2 minutes (no GitHub webhook/tunnel needed)
-        pollSCM('H/2 * * * *')
+        pollSCM('* * * * *')
     }
     
     stages {
