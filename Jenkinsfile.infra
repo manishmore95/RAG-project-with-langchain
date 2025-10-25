@@ -69,22 +69,38 @@ pipeline {
             steps {
                 echo '🔍 Checking if stack already exists...'
                 script {
-                    def stackExists = sh(
+                    def stackStatus = sh(
                         script: """
                             aws cloudformation describe-stacks \
                                 --stack-name ${STACK_NAME} \
                                 --region ${AWS_REGION} \
-                                2>&1 | grep -q "does not exist" && echo "false" || echo "true"
+                                --query 'Stacks[0].StackStatus' \
+                                --output text 2>/dev/null || echo "NOT_FOUND"
                         """,
                         returnStdout: true
                     ).trim()
                     
-                    if (stackExists == "true") {
-                        echo "⚠️  Stack ${STACK_NAME} already exists. Will update it."
-                        env.STACK_ACTION = 'update'
-                    } else {
+                    if (stackStatus == "NOT_FOUND") {
                         echo "✅ Stack does not exist. Will create it."
                         env.STACK_ACTION = 'create'
+                    } else if (stackStatus == "ROLLBACK_COMPLETE") {
+                        echo "⚠️  Stack is in ROLLBACK_COMPLETE state. Deleting it first..."
+                        sh """
+                            aws cloudformation delete-stack \
+                                --stack-name ${STACK_NAME} \
+                                --region ${AWS_REGION}
+                            
+                            echo "⏳ Waiting for stack deletion to complete..."
+                            aws cloudformation wait stack-delete-complete \
+                                --stack-name ${STACK_NAME} \
+                                --region ${AWS_REGION}
+                            
+                            echo "✅ Stack deleted. Will create new stack."
+                        """
+                        env.STACK_ACTION = 'create'
+                    } else {
+                        echo "⚠️  Stack exists with status: ${stackStatus}. Will update it."
+                        env.STACK_ACTION = 'update'
                     }
                 }
             }
