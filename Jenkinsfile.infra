@@ -272,13 +272,23 @@ pipeline {
                 sh '''
                     echo ""
                     echo "======================================"
-                    echo "Stack Events (last 10):"
+                    echo "❌ CREATE_FAILED Events:"
                     echo "======================================"
                     aws cloudformation describe-stack-events \
                         --stack-name ${STACK_NAME} \
                         --region ${AWS_REGION} \
-                        --max-items 10 \
-                        --query 'StackEvents[*].[Timestamp,ResourceStatus,ResourceType,ResourceStatusReason]' \
+                        --query "StackEvents[?ResourceStatus=='CREATE_FAILED']|[0:5].[Timestamp,LogicalResourceId,ResourceType,ResourceStatusReason]" \
+                        --output table || echo "No CREATE_FAILED events found"
+                    
+                    echo ""
+                    echo "======================================"
+                    echo "📋 All Recent Events (last 20):"
+                    echo "======================================"
+                    aws cloudformation describe-stack-events \
+                        --stack-name ${STACK_NAME} \
+                        --region ${AWS_REGION} \
+                        --max-items 20 \
+                        --query 'StackEvents[*].[Timestamp,ResourceStatus,LogicalResourceId,ResourceStatusReason]' \
                         --output table || true
                 ''' 
             }
