@@ -175,6 +175,40 @@ pipeline {
             }
         }
         
+        stage('Setup Docker Buildx') {
+            steps {
+                echo '🔧 Setting up Docker Buildx for multi-platform builds...'
+                script {
+                    sh '''
+                        set -e
+                        
+                        # Check if buildx is available
+                        if ! docker buildx version &>/dev/null; then
+                            echo "❌ Docker buildx not available"
+                            echo "Using standard docker build instead"
+                            exit 0
+                        fi
+                        
+                        echo "✅ Docker buildx is available"
+                        
+                        # Create or use existing buildx builder
+                        if ! docker buildx inspect multiplatform &>/dev/null; then
+                            echo "Creating new buildx builder..."
+                            docker buildx create --name multiplatform --use
+                        else
+                            echo "Using existing buildx builder..."
+                            docker buildx use multiplatform
+                        fi
+                        
+                        # Bootstrap the builder
+                        docker buildx inspect --bootstrap
+                        
+                        echo "✅ Buildx setup complete"
+                    '''
+                }
+            }
+        }
+        
         stage('Build Docker Image') {
             steps {
                 echo '🏗️  Building Docker image...'
@@ -182,13 +216,15 @@ pipeline {
                     sh """
                         set -e
                         
-                        echo "Building image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+                        echo "Building multi-platform image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
                         
-                        # Build Docker image
-                        docker build \
+                        # Build Docker image for multiple platforms (amd64 and arm64)
+                        # Using --load since we need to push separately
+                        docker buildx build \
+                            --platform linux/amd64 \
                             -t ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG} \
                             -t ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest \
-                            --build-arg BUILDKIT_INLINE_CACHE=1 \
+                            --load \
                             .
                         
                         echo "✅ Docker image built successfully"
