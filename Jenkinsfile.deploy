@@ -479,7 +479,7 @@ pipeline {
                             # Check for ImagePullBackOff
                             FAILED_PODS=$(kubectl get pods -l app=multi-doc-chat -o jsonpath='{range .items[?(@.status.phase!="Running")]}{.metadata.name}{" "}{.status.containerStatuses[0].state.waiting.reason}{"\n"}{end}' 2>/dev/null || echo "")
                             
-                            if echo "${FAILED_PODS}" | grep -q "ImagePullBackOff\|ErrImagePull"; then
+                            if echo "${FAILED_PODS}" | grep -qE "ImagePullBackOff|ErrImagePull"; then
                                 echo ""
                                 echo "❌ ImagePullBackOff detected!"
                                 echo ""
