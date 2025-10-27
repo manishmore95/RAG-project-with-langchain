@@ -15,7 +15,7 @@ pipeline {
     
     environment {
         // AWS Configuration
-        AWS_REGION = "${env.AWS_REGION ?: 'us-west-1'}"
+        AWS_REGION = "${env.AWS_REGION ?: 'us-east-1'}"
         AWS_ACCESS_KEY_ID = "${env.AWS_ACCESS_KEY_ID}"
         AWS_SECRET_ACCESS_KEY = "${env.AWS_SECRET_ACCESS_KEY}"
         
@@ -105,6 +105,18 @@ pipeline {
                             exit 1
                         fi
                         echo "✅ ECR_REGISTRY is set: ${ECR_REGISTRY}"
+                        
+                        # Verify region consistency
+                        echo ""
+                        echo "Verifying region consistency..."
+                        if echo "${ECR_REGISTRY}" | grep -q "${AWS_REGION}"; then
+                            echo "✅ ECR registry region matches AWS_REGION (${AWS_REGION})"
+                        else
+                            echo "⚠️  WARNING: ECR registry region may not match AWS_REGION"
+                            echo "   ECR_REGISTRY: ${ECR_REGISTRY}"
+                            echo "   AWS_REGION: ${AWS_REGION}"
+                            echo "   Please verify these are consistent"
+                        fi
                         
                         echo ""
                         echo "✅ All prerequisites check passed"
@@ -209,6 +221,35 @@ pipeline {
             }
         }
         
+        stage('Verify ECR Image') {
+            steps {
+                echo '🔍 Verifying image exists in ECR...'
+                script {
+                    sh """
+                        set -e
+                        
+                        echo "Checking if image exists in ECR..."
+                        aws ecr describe-images \
+                            --repository-name ${ECR_REPOSITORY} \
+                            --image-ids imageTag=${IMAGE_TAG} \
+                            --region ${AWS_REGION}
+                        
+                        echo "✅ Image verified in ECR"
+                        
+                        # List recent images
+                        echo ""
+                        echo "Recent images in repository:"
+                        aws ecr describe-images \
+                            --repository-name ${ECR_REPOSITORY} \
+                            --region ${AWS_REGION} \
+                            --max-items 5 \
+                            --query 'sort_by(imageDetails,& imagePushedAt)[-5:].[imageTags[0],imagePushedAt]' \
+                            --output table
+                    """
+                }
+            }
+        }
+        
         stage('Setup kubectl') {
             steps {
                 echo '⚙️  Configuring kubectl for EKS...'
@@ -234,6 +275,93 @@ pipeline {
             }
         }
         
+        stage('Verify Node IAM Permissions') {
+            steps {
+                echo '🔍 Verifying node IAM permissions for ECR...'
+                script {
+                    sh '''
+                        set -e
+                        
+                        echo "Checking node instance profile..."
+                        
+                        # Get node instance ID
+                        NODE_NAME=$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}')
+                        echo "Node: ${NODE_NAME}"
+                        
+                        # Check if nodes can reach ECR
+                        echo ""
+                        echo "Checking node IAM role..."
+                        aws eks describe-nodegroup \
+                            --cluster-name ${EKS_CLUSTER_NAME} \
+                            --nodegroup-name ${EKS_CLUSTER_NAME}-nodegroup \
+                            --region ${AWS_REGION} \
+                            --query 'nodegroup.nodeRole' \
+                            --output text
+                        
+                        NODE_ROLE=$(aws eks describe-nodegroup \
+                            --cluster-name ${EKS_CLUSTER_NAME} \
+                            --nodegroup-name ${EKS_CLUSTER_NAME}-nodegroup \
+                            --region ${AWS_REGION} \
+                            --query 'nodegroup.nodeRole' \
+                            --output text)
+                        
+                        echo ""
+                        echo "Node IAM Role: ${NODE_ROLE}"
+                        echo ""
+                        echo "Checking attached policies..."
+                        
+                        ROLE_NAME=$(echo ${NODE_ROLE} | awk -F'/' '{print $NF}')
+                        aws iam list-attached-role-policies --role-name ${ROLE_NAME}
+                        
+                        echo "✅ Node IAM permissions verified"
+                    '''
+                }
+            }
+        }
+        
+        stage('Cleanup Failed Deployments') {
+            steps {
+                echo '🧹 Cleaning up any failed deployments...'
+                script {
+                    sh '''
+                        set -e
+                        
+                        # Check if deployment exists
+                        if kubectl get deployment multi-doc-chat 2>/dev/null; then
+                            echo "Found existing deployment, checking status..."
+                            
+                            # Get current status
+                            kubectl get deployment multi-doc-chat
+                            kubectl get pods -l app=multi-doc-chat
+                            
+                            # Check for ImagePullBackOff pods
+                            FAILED_PODS=$(kubectl get pods -l app=multi-doc-chat --field-selector=status.phase!=Running -o name 2>/dev/null || echo "")
+                            
+                            if [ -n "${FAILED_PODS}" ]; then
+                                echo ""
+                                echo "Found failed pods, describing one for diagnostics:"
+                                FIRST_POD=$(echo "${FAILED_PODS}" | head -1)
+                                kubectl describe ${FIRST_POD} || true
+                                
+                                echo ""
+                                echo "Deleting existing deployment to start fresh..."
+                                kubectl delete deployment multi-doc-chat
+                                
+                                echo "Waiting for pods to terminate..."
+                                kubectl wait --for=delete pod -l app=multi-doc-chat --timeout=60s || true
+                                
+                                echo "✅ Old deployment cleaned up"
+                            else
+                                echo "Existing deployment is healthy, will perform rolling update"
+                            fi
+                        else
+                            echo "No existing deployment found, will create new one"
+                        fi
+                    '''
+                }
+            }
+        }
+        
         stage('Create/Update Kubernetes Secrets') {
             steps {
                 echo '🔐 Creating/Updating Kubernetes secrets...'
@@ -248,10 +376,26 @@ pipeline {
                             --from-literal=GOOGLE_API_KEY="${GOOGLE_API_KEY}" \
                             --dry-run=client -o yaml | kubectl apply -f -
                         
-                        echo "✅ Secrets created/updated successfully"
+                        echo "✅ Application secrets created/updated successfully"
                         
                         # Verify secret exists
                         kubectl get secret multi-doc-chat-secrets
+                        
+                        echo ""
+                        echo "Creating ECR registry secret as backup authentication method..."
+                        
+                        # Get ECR token
+                        ECR_TOKEN=$(aws ecr get-login-password --region ${AWS_REGION})
+                        
+                        # Create or update ECR pull secret
+                        kubectl create secret docker-registry ecr-registry-secret \
+                            --docker-server=${ECR_REGISTRY} \
+                            --docker-username=AWS \
+                            --docker-password="${ECR_TOKEN}" \
+                            --dry-run=client -o yaml | kubectl apply -f -
+                        
+                        echo "✅ ECR registry secret created/updated"
+                        kubectl get secret ecr-registry-secret
                     '''
                 }
             }
@@ -317,10 +461,59 @@ pipeline {
                     sh '''
                         set -e
                         
-                        # Wait for rollout to complete (timeout: 5 minutes)
-                        kubectl rollout status deployment/multi-doc-chat --timeout=300s
+                        echo "Starting rollout verification..."
+                        echo ""
                         
-                        echo "✅ Rollout completed successfully"
+                        # Monitor rollout with timeout
+                        TIMEOUT=300
+                        ELAPSED=0
+                        INTERVAL=10
+                        
+                        while [ $ELAPSED -lt $TIMEOUT ]; do
+                            # Get deployment status
+                            READY=$(kubectl get deployment multi-doc-chat -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
+                            DESIRED=$(kubectl get deployment multi-doc-chat -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "0")
+                            
+                            echo "Status: ${READY}/${DESIRED} replicas ready"
+                            
+                            # Check for ImagePullBackOff
+                            FAILED_PODS=$(kubectl get pods -l app=multi-doc-chat -o jsonpath='{range .items[?(@.status.phase!="Running")]}{.metadata.name}{" "}{.status.containerStatuses[0].state.waiting.reason}{"\n"}{end}' 2>/dev/null || echo "")
+                            
+                            if echo "${FAILED_PODS}" | grep -q "ImagePullBackOff\|ErrImagePull"; then
+                                echo ""
+                                echo "❌ ImagePullBackOff detected!"
+                                echo ""
+                                echo "Failed pods:"
+                                echo "${FAILED_PODS}"
+                                echo ""
+                                echo "Describing a failed pod for more details:"
+                                FAILED_POD=$(kubectl get pods -l app=multi-doc-chat -o jsonpath='{.items[?(@.status.phase!="Running")].metadata.name}' | awk '{print $1}')
+                                kubectl describe pod ${FAILED_POD}
+                                echo ""
+                                echo "Pod events:"
+                                kubectl get events --field-selector involvedObject.name=${FAILED_POD} --sort-by='.lastTimestamp'
+                                exit 1
+                            fi
+                            
+                            # Check if deployment is ready
+                            if [ "${READY}" = "${DESIRED}" ] && [ "${READY}" != "0" ]; then
+                                echo ""
+                                echo "✅ Rollout completed successfully!"
+                                kubectl get pods -l app=multi-doc-chat -o wide
+                                exit 0
+                            fi
+                            
+                            sleep $INTERVAL
+                            ELAPSED=$((ELAPSED + INTERVAL))
+                        done
+                        
+                        echo ""
+                        echo "❌ Rollout timed out after ${TIMEOUT} seconds"
+                        echo ""
+                        echo "Current status:"
+                        kubectl get deployment multi-doc-chat
+                        kubectl get pods -l app=multi-doc-chat
+                        exit 1
                     '''
                 }
             }

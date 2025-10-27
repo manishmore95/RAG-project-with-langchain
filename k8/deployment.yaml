@@ -19,6 +19,8 @@ spec:
       labels:
         app: multi-doc-chat
     spec:
+      imagePullSecrets:
+      - name: ecr-registry-secret
       containers:
       - name: multi-doc-chat
         image: <ECR_REGISTRY>/<ECR_REPOSITORY>:latest
