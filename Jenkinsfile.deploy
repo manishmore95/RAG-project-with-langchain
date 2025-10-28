@@ -578,7 +578,7 @@ pipeline {
                         echo "======================================"
                         echo "Service:"
                         echo "======================================"
-                        kubectl get svc multi-doc-chat-live-service
+                        kubectl get svc multi-doc-chat-service
                     '''
                 }
             }
@@ -598,7 +598,7 @@ pipeline {
                         
                         # Wait up to 5 minutes for LoadBalancer to get external IP
                         for i in {1..30}; do
-                            EXTERNAL_IP=$(kubectl get svc multi-doc-chat-live-service \
+                            EXTERNAL_IP=$(kubectl get svc multi-doc-chat-service \
                                 -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo "")
                             
                             if [ -n "${EXTERNAL_IP}" ] && [ "${EXTERNAL_IP}" != "null" ]; then
@@ -617,7 +617,7 @@ pipeline {
                         
                         if [ -z "${EXTERNAL_IP}" ] || [ "${EXTERNAL_IP}" == "null" ]; then
                             echo "⚠️  LoadBalancer external IP not yet available"
-                            echo "Run: kubectl get svc multi-doc-chat-live-service -w"
+                            echo "Run: kubectl get svc multi-doc-chat-service -w"
                             echo "to watch for the external IP"
                         fi
                     '''
@@ -633,7 +633,7 @@ pipeline {
                         set -e
                         
                         # Get LoadBalancer URL
-                        EXTERNAL_IP=$(kubectl get svc multi-doc-chat-live-service \
+                        EXTERNAL_IP=$(kubectl get svc multi-doc-chat-service \
                             -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo "")
                         
                         if [ -n "${EXTERNAL_IP}" ] && [ "${EXTERNAL_IP}" != "null" ]; then
@@ -677,7 +677,7 @@ pipeline {
                     echo ""
                     echo "To access the application:"
                     echo "1. Get the LoadBalancer URL:"
-                    echo "   kubectl get svc multi-doc-chat-live-service"
+                    echo "   kubectl get svc multi-doc-chat-service"
                     echo ""
                     echo "2. View logs:"
                     echo "   kubectl logs -l app=multi-doc-chat-live -f"
