@@ -50,6 +50,11 @@ python run_evaluations.py --evaluator correctness --chunk-size 500 --k 10
 - Full Guide: [EVALUATION_GUIDE.md](EVALUATION_GUIDE.md)
 - Jupyter Notebook: [notebook/Evaluations.ipynb](notebook/Evaluations.ipynb)
 
+
+**Deployment Guide:**
+https://agenticai-session.notion.site/EKS-Deployment-29a5a934f2cf80cd89b4f525d3d8eb0b
+
+
 ## Notes
 - Ensure your API keys/config are set for the `ModelLoader` to load embeddings/LLM.
 - For evaluations, you need `LANGSMITH_API_KEY` and `GOOGLE_API_KEY` in your `.env` file.
