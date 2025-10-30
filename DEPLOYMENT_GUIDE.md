@@ -1,3 +1,8 @@
+
+
+
+
+
 # 🚀 Azure Deployment Guide - Step by Step
 
 This guide will walk you through deploying your LLMOps project to Azure using Jenkins CI/CD pipeline.
@@ -7,10 +12,34 @@ This guide will walk you through deploying your LLMOps project to Azure using Je
 Before starting, ensure you have:
 
 - [ ] Azure CLI installed (`az --version`)
+- [ ] Jenkins installed (local or CI/CD server)
 - [ ] Azure account with active subscription
 - [ ] Docker Desktop installed and running
 - [ ] Git repository set up on GitHub
 - [ ] API keys ready (GROQ_API_KEY, GOOGLE_API_KEY)
+
+
+
+
+**Installing Azure CLI:**
+
+- **macOS**: 
+  ```bash
+  brew update && brew install azure-cli
+  ```
+
+- **Linux**: 
+  ```bash
+  curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+  ```
+
+- **Windows**: 
+  Download and run the [Azure CLI MSI installer](https://aka.ms/installazurecliwindows)
+  
+  Or using PowerShell:
+  ```powershell
+  Invoke-WebRequest -Uri https://aka.ms/installazurecliwindows -OutFile .\AzureCLI.msi; Start-Process msiexec.exe -Wait -ArgumentList '/I AzureCLI.msi /quiet'; rm .\AzureCLI.msi
+  ```
 
 ## 🎯 Deployment Steps
 
