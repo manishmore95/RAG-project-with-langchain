@@ -8,7 +8,6 @@ services:
     platform: linux/amd64
     container_name: jenkins-local
     privileged: true
-    user: root
     ports:
       - "8083:8080"
       - "50000:50000"
@@ -16,6 +15,8 @@ services:
       - jenkins_home:/var/jenkins_home
       - /var/run/docker.sock:/var/run/docker.sock
       - ./:/workspace
+    environment:
+      - DOCKER_HOST=unix:///var/run/docker.sock
 
 volumes:
   jenkins_home:
